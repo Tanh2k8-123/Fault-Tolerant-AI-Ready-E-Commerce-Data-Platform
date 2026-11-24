@@ -1,0 +1,177 @@
+version: 2
+models:
+  - name: int_orders_current
+    description: Latest revision per order, retaining each unkeyed physical row.
+    columns:
+      - name: source_row_id
+        description: Physical row identifier within this table and batch.
+        data_tests: [unique, not_null]
+      - name: order_id
+        description: Business order identifier shared by revisions.
+      - name: customer_id
+        description: Customer identifier.
+      - name: product_id
+        description: Product catalog identifier.
+      - name: order_status
+        description: Order lifecycle status.
+      - name: quantity
+        description: Number of units ordered.
+      - name: unit_price
+        description: Order-time price per unit in VND.
+      - name: amount
+        description: Signed order amount in VND.
+      - name: created_at
+        description: UTC creation time of the business record.
+      - name: updated_at
+        description: UTC timestamp of this source revision.
+      - name: ingested_at
+        description: Simulated UTC arrival time.
+      - name: ingestion_date
+        description: UTC arrival date from the Hive partition.
+        data_tests: [not_null]
+      - name: missing_order_id
+        description: True when the identity uses the physical source row.
+      - name: record_key
+        description: Order ID or the physical row ID when the order ID is missing.
+      - name: error_reason
+        description: First violated rule in order of precedence (order key, customer key, amount).
+  - name: silver_orders_clean
+    description: Latest valid orders at the processed cutoff.
+    columns:
+      - name: source_row_id
+        description: Physical row identifier within this table and batch.
+      - name: order_id
+        description: Business order identifier shared by revisions.
+        data_tests: [unique, not_null]
+      - name: customer_id
+        description: Customer identifier.
+      - name: product_id
+        description: Product catalog identifier.
+      - name: order_status
+        description: Order lifecycle status.
+      - name: quantity
+        description: Number of units ordered.
+      - name: unit_price
+        description: Order-time price per unit in VND.
+      - name: amount
+        description: Signed order amount in VND.
+      - name: created_at
+        description: UTC creation time of the business record.
+      - name: updated_at
+        description: UTC timestamp of this source revision.
+      - name: ingested_at
+        description: Simulated UTC arrival time.
+      - name: ingestion_date
+        description: UTC arrival date from the Hive partition.
+        data_tests: [not_null]
+  - name: quarantine_orders
+    description: Rejected rows with their original signed amount.
+    columns:
+      - name: source_row_id
+        description: Physical row identifier within this table and batch.
+        data_tests: [unique, not_null]
+      - name: order_id
+        description: Business order identifier shared by revisions.
+      - name: customer_id
+        description: Customer identifier.
+      - name: product_id
+        description: Product catalog identifier.
+      - name: order_status
+        description: Order lifecycle status.
+      - name: quantity
+        description: Number of units ordered.
+      - name: unit_price
+        description: Order-time price per unit in VND.
+      - name: amount
+        description: Signed order amount in VND.
+      - name: created_at
+        description: UTC creation time of the business record.
+      - name: updated_at
+        description: UTC timestamp of this source revision.
+      - name: ingested_at
+        description: Simulated UTC arrival time.
+      - name: ingestion_date
+        description: UTC arrival date from the Hive partition.
+        data_tests: [not_null]
+      - name: error_reason
+        description: First violated rule in order of precedence (order key, customer key, amount).
+      - name: quarantined_at
+        description: Logical quarantine timestamp equal to arrival time for deterministic replay.
+  - name: silver_customers_daily
+    description: Last customer revision for each UTC arrival day.
+    columns:
+      - name: source_row_id
+        description: Physical row identifier within this table and batch.
+        data_tests: [unique, not_null]
+      - name: customer_id
+        description: Customer identifier.
+        data_tests: [not_null]
+      - name: membership_tier
+        description: Customer membership tier effective at updated_at.
+      - name: created_at
+        description: UTC creation time of the business record.
+      - name: updated_at
+        description: UTC timestamp of this source revision.
+      - name: ingested_at
+        description: Simulated UTC arrival time.
+      - name: ingestion_date
+        description: UTC arrival date from the Hive partition.
+        data_tests: [not_null]
+  - name: silver_products
+    description: Most recent product version.
+    columns:
+      - name: source_row_id
+        description: Physical row identifier within this table and batch.
+      - name: product_id
+        description: Product catalog identifier.
+        data_tests: [unique, not_null]
+      - name: product_name
+        description: Catalog display name.
+      - name: category
+        description: Catalog category.
+      - name: list_price
+        description: Catalog price in VND.
+      - name: updated_at
+        description: UTC timestamp of this source revision.
+      - name: ingested_at
+        description: Simulated UTC arrival time.
+      - name: ingestion_date
+        description: UTC arrival date from the Hive partition.
+        data_tests: [not_null]
+  - name: silver_reviews
+    description: Most recent reviews with masked contact details.
+    columns:
+      - name: source_row_id
+        description: Physical row identifier within this table and batch.
+      - name: review_id
+        description: Review identifier.
+        data_tests: [unique, not_null]
+      - name: order_id
+        description: Business order identifier shared by revisions.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('fct_orders')
+                field: order_id
+      - name: customer_id
+        description: Customer identifier.
+      - name: product_id
+        description: Product catalog identifier.
+      - name: rating
+        description: Customer rating from one to five.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4, 5]
+                quote: false
+      - name: review_text
+        description: Review text with email addresses and fixture phone numbers masked.
+      - name: created_at
+        description: UTC creation time of the business record.
+      - name: ingested_at
+        description: Simulated UTC arrival time.
+      - name: ingestion_date
+        description: UTC arrival date from the Hive partition.
+        data_tests: [not_null]

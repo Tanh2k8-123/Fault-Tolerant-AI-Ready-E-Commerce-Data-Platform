@@ -1,0 +1,49 @@
+name: Data pipeline
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: data-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    env:
+      DBT_TARGET: local
+      DBT_PROJECT_DIR: dbt_project
+      DBT_PROFILES_DIR: dbt_project
+      DBT_SEND_ANONYMOUS_USAGE_STATS: "false"
+      RAW_DIR: data/raw
+      DUCKDB_PATH: data/ecommerce.duckdb
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: requirements.txt
+      - name: Install Python dependencies
+        run: |
+          uv venv --python 3.12
+          uv pip install -r requirements.txt
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+      - name: Lint Python and dbt SQL
+        run: make lint
+      - name: Run Python tests
+        run: make test
+      - name: Generate 10,000 orders and 1,000 reviews
+        run: make gen-small ROWS=10000 REVIEWS=1000 SEED=42
+      - name: Bootstrap Bronze and snapshot customers
+        run: |
+          dbt run --select path:models/bronze
+          dbt snapshot
+      - name: Build Silver and Gold
+        run: dbt run --exclude path:models/bronze
+      - name: Verify quality and reconciliation
+        run: dbt test

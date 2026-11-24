@@ -1,0 +1,79 @@
+name: ecommerce-platform
+
+x-minio-env: &minio-env
+  MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env}
+  MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
+
+services:
+  minio:
+    image: alpine/minio:RELEASE.2025-10-15T17-29-55Z
+    command: server /home/minio/store --console-address ":9001"
+    environment: *minio-env
+    ports:
+      - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/home/minio
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9000/minio/health/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  bucket-init:
+    image: amazon/aws-cli:2.27.49
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ENDPOINT_URL: http://minio:9000
+      MINIO_BUCKET: ${MINIO_BUCKET:-ecommerce}
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        if ! aws s3api head-bucket --bucket "$$MINIO_BUCKET" 2>/dev/null; then
+          aws s3api create-bucket --bucket "$$MINIO_BUCKET"
+        fi
+        aws s3api head-bucket --bucket "$$MINIO_BUCKET"
+
+  airflow:
+    build: ./orchestration
+    command: standalone
+    depends_on:
+      bucket-init:
+        condition: service_completed_successfully
+    environment:
+      <<: *minio-env
+      MINIO_BUCKET: ${MINIO_BUCKET:-ecommerce}
+      MINIO_ENDPOINT_URL: http://minio:9000
+      DBT_TARGET: minio
+      DBT_PROJECT_DIR: /opt/ecommerce/dbt_project
+      DBT_PROFILES_DIR: /opt/ecommerce/dbt_project
+      DBT_TARGET_PATH: /opt/airflow/dbt-target
+      DBT_LOG_PATH: /opt/airflow/dbt-logs
+      DBT_SEND_ANONYMOUS_USAGE_STATS: "false"
+      PIPELINE_BATCH_ID: ${PIPELINE_BATCH_ID:-demo01}
+      DUCKDB_PATH: /opt/airflow/warehouse-${PIPELINE_BATCH_ID:-demo01}.duckdb
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__WEBSERVER__WORKERS: "1"
+      AIRFLOW__SCHEDULER__PARSING_PROCESSES: "1"
+    volumes:
+      - airflow-home:/opt/airflow
+      - ./orchestration/dags:/opt/airflow/dags:ro
+      - ./dbt_project:/opt/ecommerce/dbt_project:ro
+    ports:
+      - "127.0.0.1:${AIRFLOW_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 18
+
+volumes:
+  minio-data:
+  airflow-home:

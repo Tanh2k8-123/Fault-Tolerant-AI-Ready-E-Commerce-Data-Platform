@@ -1,0 +1,142 @@
+version: 2
+models:
+  - name: dim_customers
+    description: One row per SCD Type 2 customer version. The version applies from valid_from inclusive to valid_to exclusive. A null end is open. Join historical orders on customer_version_id.
+    columns:
+      - name: customer_version_id
+        description: Stable key for a customer and effective UTC timestamp.
+        data_tests:
+          - not_null
+          - unique
+      - name: customer_id
+        description: Customer business key shared by historical versions.
+        data_tests:
+          - not_null
+      - name: membership_tier
+        description: Membership tier effective at the time of the order.
+        data_tests:
+          - not_null
+      - name: valid_from
+        description: Inclusive UTC start of the customer version.
+        data_tests:
+          - not_null
+      - name: valid_to
+        description: Exclusive UTC end of the version, null for the current version.
+      - name: is_current
+        description: True for the open customer interval.
+        data_tests:
+          - not_null
+  - name: dim_products
+    description: One row per product at its latest observed version. Join fct_orders on product_id. Historical revenue uses the order-time amount.
+    columns:
+      - name: product_id
+        description: Product catalog key.
+        data_tests:
+          - not_null
+          - unique
+      - name: product_name
+        description: Product display name.
+        data_tests:
+          - not_null
+      - name: category
+        description: Product category.
+        data_tests:
+          - not_null
+      - name: list_price
+        description: Latest catalog price in VND.
+        data_tests:
+          - not_null
+      - name: updated_at
+        description: UTC timestamp of the latest source revision.
+        data_tests:
+          - not_null
+  - name: fct_orders
+    description: One row per valid deduplicated order, including cancelled and returned orders. Count order_id for Order Count. Sum amount for GMV. Sum completed order amounts for Net Revenue. All amounts are in VND.
+    columns:
+      - name: order_id
+        description: Business key of the latest valid order.
+        data_tests:
+          - not_null
+          - unique
+      - name: customer_id
+        description: Customer business key shared by historical versions.
+        data_tests:
+          - not_null
+      - name: customer_version_id
+        description: Stable key for a customer and effective UTC timestamp.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_customers')
+                field: customer_version_id
+      - name: product_id
+        description: Product catalog key.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_products')
+                field: product_id
+      - name: order_status
+        description: Latest order status.
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [completed, cancelled, returned]
+      - name: quantity
+        description: Number of units on the order.
+        data_tests:
+          - not_null
+      - name: unit_price
+        description: Price per unit at order time in VND.
+        data_tests:
+          - not_null
+      - name: amount
+        description: Total order value in VND.
+        data_tests:
+          - not_null
+      - name: created_at
+        description: Original UTC order creation timestamp.
+        data_tests:
+          - not_null
+      - name: updated_at
+        description: UTC timestamp of the latest source revision.
+        data_tests:
+          - not_null
+      - name: ingested_at
+        description: UTC arrival timestamp of the selected order revision.
+        data_tests:
+          - not_null
+      - name: ingestion_date
+        description: UTC partition date of that revision.
+        data_tests:
+          - not_null
+  - name: mart_daily_revenue
+    description: One row per UTC order date and historical membership tier with at least one valid order. Sum total_orders, gmv or net_revenue across groups to obtain totals. Fill missing dates with zero for calendar-day rolling windows.
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "(order_date, membership_tier)"
+    columns:
+      - name: order_date
+        description: UTC calendar date of order creation.
+        data_tests:
+          - not_null
+      - name: membership_tier
+        description: Membership tier effective at the time of the order.
+        data_tests:
+          - not_null
+      - name: total_orders
+        description: Count of valid deduplicated orders across all statuses.
+        data_tests:
+          - not_null
+      - name: gmv
+        description: Sum of order amount in VND across completed, cancelled and returned orders.
+        data_tests:
+          - not_null
+      - name: net_revenue
+        description: Sum of amount in VND for completed orders only. Cancelled and returned orders contribute zero.
+        data_tests:
+          - not_null

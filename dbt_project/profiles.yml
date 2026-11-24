@@ -1,0 +1,23 @@
+ecommerce:
+  target: "{{ env_var('DBT_TARGET', 'local') }}"
+  outputs:
+    local: &duckdb
+      type: duckdb
+      path: "{{ env_var('DUCKDB_PATH', 'data/ecommerce.duckdb') }}"
+      threads: 2
+      settings:
+        TimeZone: UTC
+    lint:
+      <<: *duckdb
+      path: ":memory:"
+    minio:
+      <<: *duckdb
+      extensions: [httpfs]
+      secrets:
+        - type: s3
+          key_id: "{{ env_var('MINIO_ROOT_USER', '') }}"
+          secret: "{{ env_var('MINIO_ROOT_PASSWORD', '') }}"
+          endpoint: "{{ env_var('MINIO_ENDPOINT_URL', 'http://127.0.0.1:9000').split('://')[-1].rstrip('/') }}"
+          use_ssl: "{{ env_var('MINIO_ENDPOINT_URL', 'http://127.0.0.1:9000').startswith('https://') }}"
+          url_style: path
+          region: us-east-1
