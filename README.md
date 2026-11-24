@@ -1,5 +1,7 @@
 # Fault-Tolerant & AI-Ready E-Commerce Data Platform
 
+[![Data pipeline](https://github.com/Tanh2k8-123/Fault-Tolerant-AI-Ready-E-Commerce-Data-Platform/actions/workflows/ci.yml/badge.svg)](https://github.com/Tanh2k8-123/Fault-Tolerant-AI-Ready-E-Commerce-Data-Platform/actions/workflows/ci.yml)
+
 A reproducible e-commerce warehouse built with DuckDB and dbt. The pipeline injects five failure cases into synthetic orders and reviews, preserves rejected orders for audit, and exposes historical revenue through a read-only natural-language query demo.
 
 For the default sample, **10,300 raw order rows** resolve to **9,850 valid orders and 150 quarantined records**. A dbt test independently reconstructs the latest orders from Bronze and reconciles both row count and signed amount against Gold plus quarantine.
